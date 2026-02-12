@@ -1,0 +1,92 @@
+---
+- name: Add Remote Elasticsearch Clusters (CCS, Proxy Mode, API Key Auth)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    local_es_host: "https://local-es.example.com:9200"
+    local_es_user: "elastic"
+    local_es_password: "{{ vault_local_es_password }}"
+    verify_ssl: true
+
+    # remote_clusters:
+    #   - alias: "remote-dc2"
+    #     proxy_address: "remote-es-dc2.example.com:9300"
+    #     es_host: "https://remote-es-dc2.example.com:9200"
+    #     es_user: "elastic"
+    #     es_password: "{{ vault_remote_dc2_password }}"
+    #     proxy_socket_connections: 18   # optional, default 18
+    #     skip_unavailable: true         # optional, default true
+    #     compress: true                 # optional, default true
+
+  tasks:
+
+    - name: Check existing remote cluster registrations
+      ansible.builtin.uri:
+        url: "{{ local_es_host }}/_cluster/settings?filter_path=persistent.cluster.remote"
+        method: GET
+        user: "{{ local_es_user }}"
+        password: "{{ local_es_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ verify_ssl }}"
+        status_code: [200]
+      register: existing_remote
+
+    - name: Create cross-cluster API key on remote cluster
+      ansible.builtin.uri:
+        url: "{{ item.es_host }}/_security/cross_cluster/api_key"
+        method: POST
+        user: "{{ item.es_user }}"
+        password: "{{ item.es_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ verify_ssl }}"
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+        body:
+          name: "ccs-{{ item.alias }}"
+          access:
+            search:
+              - names: ["*"]
+        status_code: [200]
+      register: api_key_results
+      loop: "{{ remote_clusters }}"
+      when: item.alias not in (existing_remote.json.persistent.cluster.remote | default({}))
+
+    - name: Register remote clusters with API keys
+      ansible.builtin.uri:
+        url: "{{ local_es_host }}/_cluster/settings"
+        method: PUT
+        user: "{{ local_es_user }}"
+        password: "{{ local_es_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ verify_ssl }}"
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+        body:
+          persistent:
+            cluster:
+              remote:
+                "{{ item.item.alias }}":
+                  mode: "proxy"
+                  proxy_address: "{{ item.item.proxy_address }}"
+                  proxy_socket_connections: "{{ item.item.proxy_socket_connections | default(18) }}"
+                  skip_unavailable: "{{ item.item.skip_unavailable | default(true) }}"
+                  transport.compress: "{{ item.item.compress | default(true) }}"
+                  authorization:
+                    credentials: "{{ item.json.encoded }}"
+        status_code: [200]
+      loop: "{{ api_key_results.results }}"
+      when: not item.skipped | default(false)
+
+    - name: Verify remote cluster connections
+      ansible.builtin.uri:
+        url: "{{ local_es_host }}/_remote/info"
+        method: GET
+        user: "{{ local_es_user }}"
+        password: "{{ local_es_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ verify_ssl }}"
+        status_code: [200]
+      register: remote_info
