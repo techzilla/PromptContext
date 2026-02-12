@@ -1,0 +1,14 @@
+es_role_mapping:
+  native:
+    multi_role_mapping:
+      enabled: true
+      roles:
+        - kibana_user
+      rules:
+        any:
+          - field:
+              groups:
+                - "CN=,..."
+          - field:
+              username:
+                - "service_account"
