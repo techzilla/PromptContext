@@ -1,0 +1,59 @@
+---
+
+- block:
+  - name: List Native Role Mappings
+    uri:
+      url: "{{ es_api_uri }}/{{ es_security_api }}/role_mapping"
+      method: GET
+      user: "{{ es_api_basic_auth_username }}"
+      password: "{{ es_api_basic_auth_password }}"
+      force_basic_auth: yes
+      status_code: 200
+      validate_certs: "{{ es_validate_certs }}"
+    register: role_mapping_list_response
+
+  - name: Delete Native Role Mappings
+    uri:
+      url: "{{ es_api_uri }}/{{ es_security_api }}/role_mapping/{{ item | urlencode }}"
+      method: DELETE
+      status_code: 200
+      user: "{{ es_api_basic_auth_username }}"
+      password: "{{ es_api_basic_auth_password }}"
+      force_basic_auth: yes
+      validate_certs: "{{ es_validate_certs }}"
+    when: es_delete_unmanaged_native|bool
+    loop: "{{ current_mappings | difference(native_role_mappings.keys() | list) }}"
+
+  - name: Update Native Role Mappings
+    uri:
+      url: "{{ es_api_uri }}/{{ es_security_api }}/role_mapping/{{ item | urlencode }}"
+      method: PUT
+      body_format: json
+      body: "{{ desired_body }}"
+      status_code: 200
+      user: "{{ es_api_basic_auth_username }}"
+      password: "{{ es_api_basic_auth_password }}"
+      force_basic_auth: yes
+      validate_certs: "{{ es_validate_certs }}"
+    loop: "{{ native_role_mappings.keys() | list }}"
+    when: item not in current_state or current_state[item] != desired_body
+    vars:
+      desired_body: >-
+        {{
+          native_role_mappings[item] if native_role_mappings[item] is mapping and 'rules' in native_role_mappings[item]
+          else {
+            'enabled': true,
+            'roles': [item],
+            'rules': {
+              'field': {
+                'groups': native_role_mappings[item]
+              }
+            }
+          }
+        }}
+
+  when: manage_native_role_mappings|bool
+  vars:
+    native_role_mappings: "{{ es_role_mapping.native }}"
+    current_state: "{{ role_mapping_list_response.json }}"
+    current_mappings: "{{ current_state.keys() | list }}"
