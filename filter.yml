@@ -3,7 +3,8 @@ filter {
     init => '
       def deep_set(h, keys, val)
         keys[0..-2].each { |k| h = (h[k] ||= {}) }
-        h[keys[-1]] = val
+        k = keys[-1]
+        h[k] = h[k] ? Array(h[k]).push(val) : val
       end
     '
     code => '
