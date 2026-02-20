@@ -1,0 +1,25 @@
+filter {
+  ruby {
+    init => '
+      def deep_set(h, keys, val)
+        keys[0..-2].each { |k| h = (h[k] ||= {}) }
+        h[keys[-1]] = val
+      end
+    '
+    code => '
+      raw = event.get("[log][syslog][structured_data]")
+      next if raw.nil? || raw == "-"
+
+      result = {}
+      raw.scan(/\[(\S+?)(?:\s(.*?))?\]/) do |sd_id, params_str|
+        node = (result[sd_id] ||= {})
+        next unless params_str
+        params_str.scan(/(\S+?)="((?:[^"\\]|\\.)*)"/) do |key, val|
+          deep_set(node, key.split("."), val.gsub(/\\(.)/, "\\1"))
+        end
+      end
+
+      event.set("[log][syslog][structured_data]", result)
+    '
+  }
+}
