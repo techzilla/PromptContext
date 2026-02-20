@@ -1,6 +1,9 @@
 filter {
   ruby {
     init => '
+      SD_ELEMENT = /\[(\S+?)(?:\s(.*?))?\]/
+      SD_PARAM   = /(\S+?)="((?:[^"\\]|\\.)*?)"/
+
       def deep_set(h, keys, val)
         keys[0..-2].each { |k| h = (h[k] ||= {}) }
         k = keys[-1]
@@ -17,10 +20,10 @@ filter {
       next if raw.nil? || raw == "-"
 
       result = {}
-      raw.scan(/\[(\S+?)(?:\s(.*?))?\]/) do |sd_id, params_str|
+      raw.scan(SD_ELEMENT) do |sd_id, params_str|
         node = deep_get_or_create(result, sd_id.split("."))
         next unless params_str
-        params_str.scan(/(\S+?)="((?:[^"\\]|\\.)*)"/) do |key, val|
+        params_str.scan(SD_PARAM) do |key, val|
           deep_set(node, key.split("."), val.gsub(/\\(.)/, "\\1"))
         end
       end
