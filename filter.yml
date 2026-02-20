@@ -4,7 +4,12 @@ filter {
       def deep_set(h, keys, val)
         keys[0..-2].each { |k| h = (h[k] ||= {}) }
         k = keys[-1]
-        h[k] = h[k] ? Array(h[k]).push(val) : val
+        h[k] = h[k].is_a?(Hash) ? h[k] : (h[k] ? Array(h[k]).push(val) : val)
+      end
+
+      def deep_get_or_create(h, keys)
+        keys.each { |k| h = (h[k] ||= {}) }
+        h
       end
     '
     code => '
@@ -13,7 +18,7 @@ filter {
 
       result = {}
       raw.scan(/\[(\S+?)(?:\s(.*?))?\]/) do |sd_id, params_str|
-        node = (result[sd_id] ||= {})
+        node = deep_get_or_create(result, sd_id.split("."))
         next unless params_str
         params_str.scan(/(\S+?)="((?:[^"\\]|\\.)*)"/) do |key, val|
           deep_set(node, key.split("."), val.gsub(/\\(.)/, "\\1"))
