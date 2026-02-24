@@ -12,5 +12,5 @@ applyTo: '**/inventory/**/*.yml, **/playbooks/**/*.yml, **/roles/**/*.yml, **/ta
 - Use block style YAML except in the following:
   - Empty Lists/Dictionaries
   - Jinja2 expressions that would me more readable in flow style
-
+- Only comment sections that would confuse expert readers
 ## Prefrences
